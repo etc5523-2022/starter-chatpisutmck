@@ -1,0 +1,294 @@
+---
+title: 'ETC5510: Introduction to Data Analysis'
+author: "Chatpisut Makornkhan"
+date: "Assignment 2"
+output:
+  html_document:
+    toc: yes
+
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  eval = TRUE,
+  message = FALSE,  # Change this to FALSE before you submit your assignment
+  warning = FALSE,  # Change this to FALSE before you submit your assignment
+  error = FALSE,    # Change this to FALSE before you submit your assignment
+  out.width = "70%",
+  fig.width = 8, 
+  fig.height = 6,
+  fig.retina = 3)
+set.seed(6)
+```
+
+```{r libraries, echo = FALSE, message = FALSE, warning = FALSE}
+# Libraries required for the analysis (you can add more if you want to)
+library(tidyverse)
+library(readr)
+library(lubridate)
+library(tsibble)
+library(colorspace) 
+library(ggrepel) 
+library(kableExtra)
+library(ggResidpanel)
+library(broom)
+library(rpart)
+library(rpart.plot)
+library(visdat)
+library(plotly)
+library(naniar)
+library(ggResidpanel)
+library(broom)
+library(rpart)
+library(broomstick)
+library(kableExtra)
+library(tibble)
+library(xfun)
+```
+
+
+In this assignment, we are going to study energy consumption and green house emissions for a number of countries. To do that, we are given two data sets, *owid-energy-data.csv* and *population.csv*, that contain information about a number of countries over time.
+
+You can find the data sets and a code book for the assignment in the folder called *Data*.
+
+In addition to the marks displayed in each question, an additional **15 points** have been allocated for assessment of general coding style and overall performance.
+
+**Please ensure that the report knits properly into html and all the R code and R outputs are visible in the final knitted report.** **You will need to save your rendered html document into a pdf file (you can use your internet browser to print your html file into a pdf file) and upload that pdf file into Moodle for submission.**
+
+**This is an individual assignment and you must use R code to answer all the questions. Make sure that you have your messages and warnings turned off before you submit the assignment (see lines 15-17 of this Rmd file) and echo = FALSE set for the R code chunk where you load your libraries.**
+
+
+
+
+## Question 1: Read the energy data set (*owid-energy-data.csv*) and store it in a data object called *energy* (0.5pt). Read the population data set (*population.csv*) and store it in a data object called *population* (0.5pt). Show the first 4 rows of each of the data frames (1pt).
+
+
+```{r read energy data}
+energy <- read.csv("Data/owid-energy-data.csv")
+population <- read.csv("Data/population.csv")
+```
+
+```{r show data}
+head(energy,4)
+head(population,4)
+```
+
+
+## Question 2: Combine the *energy* data set with the *population* data set into a single data frame called *energy_pop* (pass on explicitely which are the variables you are using for the merging). Make sure the new data frame includes **all** the observations that are common in the *energy*  and *population* data sets, and the variables in both data frames (1pts). Show the first 5 rows of the new combined data frame (1pt). Display the dimension of the combine data set (1pt).
+
+
+```{r joining data set}
+
+energy_pop <- energy %>% 
+  left_join(population, by = c("iso_code", "country", "year"))
+```
+
+
+```{r show head}
+head(energy_pop, 5)
+```
+
+```{r show dimension}
+dim(energy_pop)
+```
+
+
+## Question 3: Calculate the average "share of electricity generation that comes from wind" (look into the code book to find the variable name in the data set) for each country across all the years (you should have a single value per country) that are recorded in the data set and store the results in a data object called *mean_windenergy*. (2pts) Create a table where you display the first 6 countries that have highest average share of electricity generation coming from wind across all the years. (2pts)
+
+
+```{r average wind energy}
+wind_energy <- energy %>% 
+  select(c("iso_code", "country", "year", "wind_share_elec"))
+
+mean_windenergy <- wind_energy %>% 
+  group_by(country) %>%
+  summarise(wind_share_elec = mean(wind_share_elec, na.rm=TRUE)) %>%
+  arrange(desc(wind_share_elec))
+```
+
+```{r display highest average}
+mean_windenergy[1:6,] %>% 
+  kable()
+```
+
+
+## Question 4: Which is the country with the highest **total** per capita electricity consumption from solar energy since 2019 (*solar_energy_per_capita*) (2pts). What is the total *solar_energy_per_capita* for that country since 2019? (1pt)
+
+```{r question 4}
+energy_capita <- energy_pop %>% 
+  group_by(country) %>% 
+  filter(year >= "2019") %>% 
+  summarise(total = sum(solar_energy_per_capita, na.rm=TRUE)) %>% 
+  ungroup()
+```
+
+
+The country with the highest **total** per capity electricity consumption from  solar energy since 2019 is `r energy_capita %>% filter(total == max(total)) %>% select(country)`.
+Paste here code inside the inline code: 
+energy_capita %>% filter(total == max(total)) %>% select(country)
+
+
+## Question 5: Which is the *country* that has the largest electricity generation from fossil fuels, measured in terawatt-hours (*fossil_electricity*) in 2020? (1pt) Looking at the World electricity generation from fossil fuels, what is the percentage contribution of that country? (1pt)
+
+```{r question 5}
+energy_elec <- energy_pop %>% 
+  group_by(country) %>% 
+  filter(year == "2020") %>% 
+  summarise(fossil_electricity) %>% 
+  arrange(desc(fossil_electricity))
+```
+
+```{r}
+energy_elec_percent_world <- energy_elec %>% 
+  filter(country == "World") %>% 
+  filter(row_number()==1) %>% select(fossil_electricity)
+
+energy_elec_percent_china <- energy_elec %>% 
+  filter(country == "China") %>% 
+  filter(row_number()==1) %>% select(fossil_electricity)
+
+energy_elec_percent_cont <- energy_elec_percent_china/energy_elec_percent_world
+```
+
+The country with largest electricity generation from fossil fuels, measured in terawatt-hours in 2020 was `r energy_elec %>% filter(country == "China") %>% filter(row_number()==1) %>% select(country)`.
+ 
+ Paste here code inside the inline code: r energy_elec %>% filter(country == "China") %>% filter(row_number()==1) %>% select(country)
+ 
+ 
+`r energy_elec %>% filter(!country %in% c("World", "Non-OECD", "Asia Pacific", "OECD")) %>% filter(row_number()==1) %>% select(country)` contributes `r energy_elec_percent_cont*100` percent of the world electricity generation from fossil fuels.
+ 
+ Paste here code inside the inline code you use you in the sentence above:
+r energy_elec %>% filter(!country %in% c("World", "Non-OECD", "Asia Pacific", "OECD")) %>% filter(row_number()==1) %>% select(country), 
+r energy_elec_percent_world <- energy_elec %>% filter(country == "World") %>% filter(row_number()==1) %>% select(fossil_electricity) energy_elec_percent_china <- energy_elec %>%filter(country == "China") %>% filter(row_number()==1) %>% select(fossil_electricity) energy_elec_percent_cont <- energy_elec_percent_china/energy_elec_percent_world energy_elec_percent_cont 
+
+
+ 
+## Question 6: First, create a data frame called *energy_pop_filtered* that excludes observations with missing values of *iso_code* and also excludes "OWID_WRL", "OWID_EUR", "OWID_EU27", "OWID_AFR" in *iso_code*. (2pt) Using this new data frame, display a table of the top 10 countries that had the largest electricity generation from nuclear power, measured in terawatt-hours (*nuclear_electricity*) in 2000. Rename the columns *country* and *nuclear_electricity* to "Top 10 Countries" and "Nuclear Power Electricity Generation (TWh)" respectively. Show only the country and nuclear power electricity generation. (2pts) 
+
+
+```{r question 6}
+energy_pop_filtered <- energy_pop %>% 
+  filter(!is.na(iso_code)) %>% 
+  filter(!iso_code %in% c("OWID_WRL", "OWID_EUR", "OWID_EU27", "OWID_AFR"))
+
+```
+
+```{r question6.2}
+energy_pop_filtered <- energy_pop_filtered %>%
+  select(c("country", "nuclear_electricity", "year")) %>% 
+  na.omit() %>% 
+  filter(nuclear_electricity >= 0.000000001) %>% 
+  filter(year == 2000) %>% 
+  arrange(desc(nuclear_electricity)) %>% 
+  rename("Top 10 Countries" = country, "Nuclear Power Electricity Generation (Twh)" = nuclear_electricity) %>%
+  select(!"year")
+
+energy_pop_filtered[1:10,] %>% 
+  kable()
+  
+```
+
+
+## Question 7: Display graphically where the missing values are the *population* variable in the *energy_pop* data set? (1pt) Hint: Use only the *population* variable and make sure you input the right object into the function.
+
+
+```{r question 7}
+energy_pop_miss <- energy_pop %>% 
+  select(population)
+
+vis_miss(energy_pop_miss)
+```
+
+
+
+## Question 8: Using the data *energy_pop*, create a figure to compare the trends in electricity demand, measured in terawatt-hours scaled by population (*electricity_demand* = *electricity_demand*/*population*) over time across the following countries (India, China, Denmark,  and United States) from 2000. Display each country trend in a different color and use the black and white theme. (4pt) By looking at the figure, what can you conclude about the trends behaviour over time? (1pt). 
+
+
+```{r question 8}
+energy_elec_compare_q8 <- energy_pop %>% 
+  filter(country %in% c("India", "China", "Denmark", "United States")) %>%
+  filter(year >= 2000) %>% 
+  mutate(electricity_demand = electricity_demand/population) %>% 
+  select(c("country", "year", "electricity_demand")) %>% 
+  group_by(country) 
+  
+  ggplot(energy_elec_compare_q8) +
+  geom_line(aes(x = year, y = electricity_demand, color = country)) +
+  theme_bw()
+```
+
+Conclusion: By looking at the figure, across the four countries in terms of electricity demand, China seems to have the most significant increasing trend over the year. While India has a upward trend, it's only a slight steep. On the other hand, United States and Denmark both have decreasing trends.
+
+## Question 9: Now display the trends for *biofuel_electricity*, *coal_electricity*,  *gas_electricity*, *hydro_electricity*, *solar_electricity*,*wind_electricity* in a different panel for each of the four countries (India, China, Denmark,  and United States) while making sure each plot is displayed using the same scales (you cannot create the figures separately). Change the y-label to "Electricity consumption" and a title to the figure "Electricity trends". (6pts)  
+
+
+```{r}
+energy_elec_compare_q9 <- energy_pop %>% 
+  filter(country %in% c("India", "China", "Denmark", "United States")) %>%
+  select(c("country", "year", "biofuel_electricity", "coal_electricity","gas_electricity", "hydro_electricity", "solar_electricity", "wind_electricity")) %>%
+  na.omit() %>% 
+  pivot_longer(cols = biofuel_electricity : wind_electricity) %>% 
+  rename("Electricity_consumption" = name, "value" = value) %>% 
+  group_by(country)
+  
+ggplot(energy_elec_compare_q9) +
+  geom_line(aes(x = year,
+  y = value, color = country)) +
+  facet_wrap(~ Electricity_consumption) +
+  ylab("Electricity consumption") + xlab("Year") + ggtitle("Electricity trends")
+```
+
+
+## Question 10: Using the data set *energy_pop*, display scatterplots for India, China, Denmark, United States showing the relationship *greenhouse_gas_emissions* since 2000. Display each scatterplot in a different panel of one figure and set scales to be free for each panel. (4pts)
+
+
+```{r question 10}
+energy_elec_disp <- energy_pop %>% 
+  filter(country %in% c("India", "China", "Denmark", "United States")) %>%
+  select(c("country", "year", "greenhouse_gas_emissions")) %>%
+  filter(year >= "2000") %>% 
+  group_by(country)
+  
+energy_elec_disp %>% 
+  ggplot(aes(x = year, y = greenhouse_gas_emissions)) +
+  geom_point() + 
+  facet_wrap(~ country, scales = "free")
+```
+
+
+## Question 11: Using the *map* function, estimate the linear models for each of the four countries in Question 10. (10pts)
+
+```{r question 11}
+
+q11_map <- energy_pop %>% 
+  mutate(year2000 = year - 2000)
+
+country_by <- q11_map %>% 
+  select("country", "year2000", "greenhouse_gas_emissions") %>%
+  group_by(country) %>% 
+  nest()
+
+model_country <- country_by %>% 
+  mutate(model = map(.x = data,
+                     .f = function(x){
+                          lm(greenhouse_gas_emissions ~ year2000, data = df, na.action=na.exclude)
+}))
+```
+
+## Question 12: Create residuals plots for each of the models and discuss whether the model assumptions are fullfilled. (4pts)
+
+
+
+
+
+## Question 13: Display the model coefficients for each of the models you fitted in Question 11 in a table where the country name is in first column, the intercept is in the second column and the slope is in the third column. Interpret each of the slope coefficients. (8pts)
+
+
+
+
+
+## Question 14: Calculate goodness-of-fit measures ((r.squre, BIC and AIC)) for each of the models you estimated in question 11 using *map*. Display the $R^2$ value for each of the models you fitted in Question 11 in a table together with the country name in the first column. Interpret the $R^2$ values. Make sure you round the values to two decimals. (6pts)
+
+## Question 15: Can you use the AIC and BIC to compare the different models you computed in Question 11? (3pts)
+
